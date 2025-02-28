@@ -1,0 +1,1465 @@
+            // Check browser support for canvas filters
+            function checkFilterSupport() {
+                let supported = true;
+                try {
+                    ctx.filter = 'blur(1px)';
+                    ctx.filter = 'none';
+                } catch (e) {
+                    supported = false;
+                    console.warn("Canvas filters not supported in this browser.");
+                    // Disable softness slider if filters not supported
+                    lineSoftnessInput.disabled = true;
+                    lineSoftnessValue.textContent += " (not supported)";
+                }
+                return supported;
+            }<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Spectrum Visualizer</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background-color: #1e1e1e;
+            color: #f0f0f0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #2a2a2a;
+            border-radius: 8px;
+        }
+        .control-group {
+            margin-bottom: 10px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        input[type="range"], select {
+            width: 100%;
+        }
+        input[type="color"] {
+            width: 100%;
+            height: 30px;
+        }
+        .canvas-container {
+            position: relative;
+            border-radius: 8px;
+            overflow: hidden;
+            background-color: #000;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+        }
+        .file-input {
+            display: none;
+        }
+        .upload-btn, .play-btn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        .upload-btn:hover, .play-btn:hover {
+            background-color: #45a049;
+        }
+        .status {
+            margin-top: 10px;
+            font-style: italic;
+        }
+        .value-display {
+            font-size: 12px;
+            color: #aaa;
+            margin-top: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Audio Spectrum Visualizer</h1>
+        
+        <div class="buttons">
+            <button class="upload-btn" id="uploadButton">Upload Audio</button>
+            <input type="file" id="audioFileInput" class="file-input" accept="audio/*">
+            <button class="play-btn" id="playButton" disabled>Play/Pause</button>
+            <button class="play-btn" id="micButton">Use Microphone</button>
+            <div class="status" id="status">No audio loaded</div>
+        </div>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="visualizationType">Visualization Type</label>
+                <select id="visualizationType">
+                    <option value="bars">Bars</option>
+                    <option value="line">Line</option>
+                    <option value="circular">Circular</option>
+                    <option value="trapNation">Trap Nation</option>
+                    <option value="wave">Wave</option>
+                    <option value="polarWave">Polar Wave</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label for="fftSize">FFT Size</label>
+                <input type="range" id="fftSize" min="5" max="15" step="1" value="10">
+                <div class="value-display" id="fftSizeValue">1024</div>
+            </div>
+            
+            <div class="control-group">
+                <label for="smoothing">Smoothing</label>
+                <input type="range" id="smoothing" min="0" max="0.99" step="0.01" value="0.5">
+                <div class="value-display" id="smoothingValue">0.5</div>
+            </div>
+            
+            <div class="control-group">
+                <label for="minDecibels">Min Decibels</label>
+                <input type="range" id="minDecibels" min="-150" max="-50" step="1" value="-100">
+                <div class="value-display" id="minDecibelsValue">-100 dB</div>
+            </div>
+            
+            <div class="control-group">
+                <label for="maxDecibels">Max Decibels</label>
+                <input type="range" id="maxDecibels" min="-80" max="0" step="1" value="-30">
+                <div class="value-display" id="maxDecibelsValue">-30 dB</div>
+            </div>
+            
+            <div class="control-group">
+                <label for="barWidth">Bar Width (%)</label>
+                <input type="range" id="barWidth" min="10" max="100" step="1" value="80">
+                <div class="value-display" id="barWidthValue">80%</div>
+            </div>
+            
+            <div class="control-group">
+                <label for="primaryColor">Primary Color</label>
+                <input type="color" id="primaryColor" value="#00AAFF">
+            </div>
+            
+            <div class="control-group">
+                <label for="secondaryColor">Secondary Color</label>
+                <input type="color" id="secondaryColor" value="#FF00AA">
+            </div>
+            
+            <div class="control-group">
+                <label for="backgroundColor">Background Color</label>
+                <input type="color" id="backgroundColor" value="#000000">
+            </div>
+            
+            <div class="control-group">
+                <label for="amplification">Amplification</label>
+                <input type="range" id="amplification" min="1" max="5" step="0.1" value="1.5">
+                <div class="value-display" id="amplificationValue">1.5x</div>
+            </div>
+            
+            <div class="control-group">
+                <label for="lowGain">Low Frequency Gain</label>
+                <input type="range" id="lowGain" min="0" max="3" step="0.1" value="1">
+                <div class="value-display" id="lowGainValue">1.0x</div>
+            </div>
+            
+            <div class="control-group">
+                <label for="midGain">Mid Frequency Gain</label>
+                <input type="range" id="midGain" min="0" max="3" step="0.1" value="1">
+                <div class="value-display" id="midGainValue">1.0x</div>
+            </div>
+            
+            <div class="control-group">
+                <label for="highGain">High Frequency Gain</label>
+                <input type="range" id="highGain" min="0" max="3" step="0.1" value="1">
+                <div class="value-display" id="highGainValue">1.0x</div>
+            </div>
+            
+            <div class="control-group">
+                <label for="mirrorEffect">Mirror Effect</label>
+                <select id="mirrorEffect">
+                    <option value="none">None</option>
+                    <option value="leftToRight">Left to Right</option>
+                    <option value="rightToLeft">Right to Left</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label for="lineThickness">Line Thickness</label>
+                <input type="range" id="lineThickness" min="1" max="10" step="0.5" value="2">
+                <div class="value-display" id="lineThicknessValue">2.0</div>
+            </div>
+            
+            <div class="control-group">
+                <label for="lineSoftness">Line Softness</label>
+                <input type="range" id="lineSoftness" min="0" max="10" step="0.5" value="0">
+                <div class="value-display" id="lineSoftnessValue">0.0</div>
+            </div>
+            
+            <div class="control-group">
+                <label for="showMountain">Show Mountains</label>
+                <input type="checkbox" id="showMountain" checked>
+            </div>
+            
+            <div class="control-group">
+                <label for="mountainColor">Mountain Color</label>
+                <input type="color" id="mountainColor" value="#333333">
+            </div>
+            
+            <div class="control-group">
+                <label for="centerSize">Center Circle Size</label>
+                <input type="range" id="centerSize" min="0.1" max="0.5" step="0.01" value="0.2">
+                <div class="value-display" id="centerSizeValue">0.20</div>
+            </div>
+            
+            <div class="control-group">
+                <label for="centerColor">Center Circle Color</label>
+                <input type="color" id="centerColor" value="#FFFFFF">
+            </div>
+            
+            <div class="control-group">
+                <label for="centerPulse">Center Pulse</label>
+                <input type="checkbox" id="centerPulse" checked>
+            </div>
+            
+            <div class="control-group">
+                <label for="freqDiffusion">Frequency Diffusion</label>
+                <input type="range" id="freqDiffusion" min="0" max="1" step="0.01" value="0.3">
+                <div class="value-display" id="freqDiffusionValue">0.30</div>
+            </div>
+            
+            <div class="control-group">
+                <label for="freqInteraction">Frequency Interaction</label>
+                <select id="freqInteraction">
+                    <option value="none">None</option>
+                    <option value="influence" selected>Influence</option>
+                    <option value="harmonic">Harmonic</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label for="frequencyScale">Frequency Scale</label>
+                <select id="frequencyScale">
+                    <option value="linear">Linear</option>
+                    <option value="logarithmic" selected>Logarithmic</option>
+                    <option value="mel">Mel (Perceptual)</option>
+                    <option value="bark">Bark Scale</option>
+                    <option value="octave">Octave Bands</option>
+                    <option value="chroma">Chroma (Musical)</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="canvas-container">
+            <canvas id="visualizer"></canvas>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // DOM Elements
+            const visualizer = document.getElementById('visualizer');
+            const audioFileInput = document.getElementById('audioFileInput');
+            const uploadButton = document.getElementById('uploadButton');
+            const playButton = document.getElementById('playButton');
+            const micButton = document.getElementById('micButton');
+            const statusElement = document.getElementById('status');
+            
+            // Controls
+            const visualizationType = document.getElementById('visualizationType');
+            const fftSizeSelect = document.getElementById('fftSize');
+            const smoothingInput = document.getElementById('smoothing');
+            const minDecibelsInput = document.getElementById('minDecibels');
+            const maxDecibelsInput = document.getElementById('maxDecibels');
+            const barWidthInput = document.getElementById('barWidth');
+            const primaryColorInput = document.getElementById('primaryColor');
+            const secondaryColorInput = document.getElementById('secondaryColor');
+            const backgroundColorInput = document.getElementById('backgroundColor');
+            const amplificationInput = document.getElementById('amplification');
+            const lowGainInput = document.getElementById('lowGain');
+            const midGainInput = document.getElementById('midGain');
+            const highGainInput = document.getElementById('highGain');
+            const freqDiffusionInput = document.getElementById('freqDiffusion');
+            const freqInteractionSelect = document.getElementById('freqInteraction');
+            const frequencyScaleSelect = document.getElementById('frequencyScale');
+            const centerSizeInput = document.getElementById('centerSize');
+            const centerColorInput = document.getElementById('centerColor');
+            const centerPulseInput = document.getElementById('centerPulse');
+            const showMountainInput = document.getElementById('showMountain');
+            const mountainColorInput = document.getElementById('mountainColor');
+            const mirrorEffectSelect = document.getElementById('mirrorEffect');
+            const lineThicknessInput = document.getElementById('lineThickness');
+            const lineSoftnessInput = document.getElementById('lineSoftness');
+            
+            // Value displays
+            const smoothingValue = document.getElementById('smoothingValue');
+            const minDecibelsValue = document.getElementById('minDecibelsValue');
+            const maxDecibelsValue = document.getElementById('maxDecibelsValue');
+            const barWidthValue = document.getElementById('barWidthValue');
+            const amplificationValue = document.getElementById('amplificationValue');
+            const fftSizeValue = document.getElementById('fftSizeValue');
+            const lowGainValue = document.getElementById('lowGainValue');
+            const midGainValue = document.getElementById('midGainValue');
+            const highGainValue = document.getElementById('highGainValue');
+            const freqDiffusionValue = document.getElementById('freqDiffusionValue');
+            const centerSizeValue = document.getElementById('centerSizeValue');
+            const lineThicknessValue = document.getElementById('lineThicknessValue');
+            const lineSoftnessValue = document.getElementById('lineSoftnessValue');
+            
+            // Audio Context
+            let audioContext;
+            let analyser;
+            let source;
+            let audioBuffer;
+            let audioElement;
+            let isPlaying = false;
+            let animationId;
+            let isUsingMic = false;
+            let mediaStream;
+            
+            // Canvas setup
+            const ctx = visualizer.getContext('2d');
+            
+            // Helper functions for frequency scales
+            function melScale(frequency) {
+                // Convert Hz to Mel scale
+                return 2595 * Math.log10(1 + frequency / 700);
+            }
+            
+            function barkScale(frequency) {
+                // Critical band rate (Bark scale)
+                return 13 * Math.atan(0.00076 * frequency) + 3.5 * Math.atan(Math.pow(frequency / 7500, 2));
+            }
+            
+            function getFrequencyFromIndex(index, bufferLength) {
+                // Calculate the frequency represented by an index
+                // Assuming a standard 44.1kHz sample rate, the Nyquist frequency is 22050Hz
+                const nyquistFrequency = 22050;
+                return index * nyquistFrequency / bufferLength;
+            }
+            
+            function getNoteFromFrequency(frequency) {
+                // Get musical note value (0-11) from frequency, where A4=440Hz
+                if (frequency <= 0) return 0;
+                
+                const a4 = 440;
+                const semitoneRatio = Math.pow(2, 1/12);
+                
+                // Calculate semitones away from A4
+                const semitones = Math.log(frequency / a4) / Math.log(semitoneRatio);
+                
+                // Convert to note index (0-11, C=0, C#=1, etc.)
+                return Math.round(semitones) % 12;
+            }
+            
+            // Apply visualization effects (mirror, softness)
+            function applyVisualizationEffects() {
+                const softness = parseFloat(lineSoftnessInput.value);
+                
+                // Apply blur filter for softness if enabled
+                try {
+                    if (softness > 0) {
+                        ctx.filter = `blur(${softness}px)`;
+                    } else {
+                        ctx.filter = 'none';
+                    }
+                } catch (e) {
+                    console.error("Error applying filter:", e);
+                    ctx.filter = 'none'; // Fallback to no filter on error
+                }
+            }
+            
+            // Reset visualization effects
+            function resetVisualizationEffects() {
+                try {
+                    ctx.filter = 'none';
+                } catch (e) {
+                    console.error("Error resetting filter:", e);
+                }
+            }
+            
+            // Mirror frequency data based on selected option
+            function getMirroredData(data) {
+                const mirrorEffect = mirrorEffectSelect.value;
+                if (mirrorEffect === 'none') {
+                    return data;
+                }
+                
+                const dataLength = data.length;
+                const halfLength = Math.floor(dataLength / 2);
+                const mirroredData = new Uint8Array(dataLength);
+                
+                if (mirrorEffect === 'leftToRight') {
+                    // Copy left half of data
+                    for (let i = 0; i < halfLength; i++) {
+                        mirroredData[i] = data[i];
+                    }
+                    
+                    // Mirror left half to right half
+                    for (let i = 0; i < halfLength; i++) {
+                        mirroredData[dataLength - 1 - i] = data[i];
+                    }
+                } else if (mirrorEffect === 'rightToLeft') {
+                    // Copy right half of data
+                    for (let i = halfLength; i < dataLength; i++) {
+                        mirroredData[i] = data[i];
+                    }
+                    
+                    // Mirror right half to left half
+                    for (let i = 0; i < halfLength; i++) {
+                        mirroredData[i] = data[dataLength - 1 - i];
+                    }
+                }
+                
+                return mirroredData;
+            }
+            
+            // Resize canvas for proper resolution
+            function resizeCanvas() {
+                const containerWidth = visualizer.clientWidth;
+                const containerHeight = Math.floor(containerWidth * 0.4); // 40% aspect ratio
+                
+                visualizer.width = containerWidth;
+                visualizer.height = containerHeight;
+                visualizer.style.height = containerHeight + 'px';
+                
+                // Redraw if we already have data
+                if (analyser) {
+                    drawVisualization();
+                }
+            }
+            
+            // Set up initial audio context
+            function initAudio() {
+                if (audioContext) return;
+                
+                try {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    analyser = audioContext.createAnalyser();
+                    updateAnalyserSettings();
+                    
+                    // Connect the analyser to the destination
+                    analyser.connect(audioContext.destination);
+                } catch (e) {
+                    console.error('Web Audio API is not supported in this browser', e);
+                    statusElement.textContent = 'Error: Web Audio API not supported';
+                }
+            }
+            
+            // Update analyser settings from controls
+            function updateAnalyserSettings() {
+                if (!analyser) return;
+                
+                // FFT size must be a power of 2 between 32 and 32768
+                const fftPower = parseInt(fftSizeSelect.value);
+                const fftSize = Math.pow(2, fftPower);
+                analyser.fftSize = fftSize;
+                
+                analyser.smoothingTimeConstant = parseFloat(smoothingInput.value);
+                analyser.minDecibels = parseInt(minDecibelsInput.value);
+                analyser.maxDecibels = parseInt(maxDecibelsInput.value);
+            }
+            
+            // Load audio file
+            function loadAudioFile(file) {
+                if (!file) return;
+                
+                initAudio();
+                
+                // Stop any current audio
+                stopAudio();
+                
+                // Create a new audio element for this file
+                if (audioElement) {
+                    audioElement.pause();
+                    audioElement.remove();
+                }
+                
+                audioElement = new Audio();
+                audioElement.src = URL.createObjectURL(file);
+                source = audioContext.createMediaElementSource(audioElement);
+                source.connect(analyser);
+                
+                statusElement.textContent = 'Audio loaded: ' + file.name;
+                playButton.disabled = false;
+                
+                // Reset isUsingMic flag
+                isUsingMic = false;
+            }
+            
+            // Toggle play/pause
+            function togglePlay() {
+                if (!audioElement && !isUsingMic) return;
+                
+                if (audioContext.state === 'suspended') {
+                    audioContext.resume();
+                }
+                
+                if (isUsingMic) {
+                    if (isPlaying) {
+                        stopAudio();
+                    } else {
+                        startMicrophone();
+                    }
+                    return;
+                }
+                
+                if (isPlaying) {
+                    audioElement.pause();
+                    cancelAnimationFrame(animationId);
+                    isPlaying = false;
+                    statusElement.textContent = 'Paused';
+                } else {
+                    audioElement.play();
+                    startVisualization();
+                    isPlaying = true;
+                    statusElement.textContent = 'Playing';
+                }
+            }
+            
+            // Stop audio completely
+            function stopAudio() {
+                if (isUsingMic && mediaStream) {
+                    mediaStream.getTracks().forEach(track => track.stop());
+                    mediaStream = null;
+                }
+                
+                if (audioElement) {
+                    audioElement.pause();
+                    if (audioElement.currentTime) {
+                        audioElement.currentTime = 0;
+                    }
+                }
+                
+                if (source) {
+                    try {
+                        source.disconnect();
+                    } catch (e) {
+                        // Ignore disconnect errors
+                    }
+                }
+                
+                cancelAnimationFrame(animationId);
+                isPlaying = false;
+            }
+            
+            // Use microphone input
+            async function startMicrophone() {
+                try {
+                    initAudio();
+                    stopAudio();
+                    
+                    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    
+                    source = audioContext.createMediaStreamSource(mediaStream);
+                    source.connect(analyser);
+                    
+                    isUsingMic = true;
+                    isPlaying = true;
+                    startVisualization();
+                    statusElement.textContent = 'Using microphone';
+                    playButton.disabled = false;
+                } catch (err) {
+                    console.error('Error accessing microphone:', err);
+                    statusElement.textContent = 'Error accessing microphone';
+                }
+            }
+            
+            // Start visualization loop
+            function startVisualization() {
+                if (!analyser) return;
+                
+                const draw = () => {
+                    drawVisualization();
+                    animationId = requestAnimationFrame(draw);
+                };
+                
+                draw();
+            }
+            
+            // Get frequency data based on selected scale and apply frequency band gains and diffusion
+            function getScaledFrequencyData(frequencyData) {
+                const scale = frequencyScaleSelect.value;
+                const bufferLength = analyser.frequencyBinCount;
+                const amplification = parseFloat(amplificationInput.value);
+                
+                // Get frequency band gain values
+                const lowGain = parseFloat(lowGainInput.value);
+                const midGain = parseFloat(midGainInput.value);
+                const highGain = parseFloat(highGainInput.value);
+                
+                // Get frequency diffusion value and interaction mode
+                const freqDiffusion = parseFloat(freqDiffusionInput.value);
+                const freqInteraction = freqInteractionSelect.value;
+                
+                // Create a copy of the data for processing
+                const processedData = new Uint8Array(bufferLength);
+                
+                // Define frequency band boundaries
+                const lowEnd = Math.floor(bufferLength * 0.1);  // End of low frequency range
+                const midEnd = Math.floor(bufferLength * 0.6);  // End of mid frequency range
+                
+                // Step 1: Apply band-specific gains
+                for (let i = 0; i < bufferLength; i++) {
+                    let gain = 1.0;
+                    
+                    // Determine base gain based on frequency range
+                    if (i < lowEnd) {
+                        // Low frequencies
+                        gain = lowGain;
+                    } else if (i < midEnd) {
+                        // Mid frequencies
+                        gain = midGain;
+                    } else {
+                        // High frequencies
+                        gain = highGain;
+                    }
+                    
+                    // Apply the standard gain
+                    processedData[i] = Math.min(255, Math.max(0, frequencyData[i] * gain));
+                }
+                
+                // Step 2: Apply frequency interaction/diffusion if enabled
+                if (freqInteraction !== 'none' && freqDiffusion > 0) {
+                    // Create a new array for the diffused data
+                    const diffusedData = new Uint8Array(bufferLength);
+                    
+                    // For each frequency bin
+                    for (let targetBin = 0; targetBin < bufferLength; targetBin++) {
+                        // Start with the original value
+                        let value = processedData[targetBin] / 255; // Normalize to 0-1
+                        
+                        // Different interaction modes
+                        if (freqInteraction === 'influence') {
+                            // Calculate weighted average across all frequencies based on distance
+                            let totalWeight = 1.0; // Start with weight of 1 for self
+                            
+                            // Iterate through all other bins to calculate their influence
+                            for (let sourceBin = 0; sourceBin < bufferLength; sourceBin++) {
+                                if (sourceBin === targetBin) continue; // Skip self
+                                
+                                // Calculate distance between bins (normalized to 0-1)
+                                const distance = Math.abs(sourceBin - targetBin) / bufferLength;
+                                
+                                // Calculate influence based on distance and diffusion parameter
+                                // Higher diffusion = influence reaches further
+                                const influence = Math.max(0, 1 - (distance / freqDiffusion));
+                                
+                                if (influence > 0) {
+                                    // Add weighted contribution from this bin
+                                    const sourceValue = processedData[sourceBin] / 255;
+                                    value += sourceValue * influence;
+                                    totalWeight += influence;
+                                }
+                            }
+                            
+                            // Normalize by total weight
+                            value = value / totalWeight;
+                        } 
+                        else if (freqInteraction === 'harmonic') {
+                            // Harmonic enhancement - boost frequencies that are harmonically related
+                            // For each bin, check harmonics (2x, 3x, etc.) and sub-harmonics (1/2, 1/3, etc.)
+                            
+                            // First get the estimated frequency of this bin
+                            const freq = getFrequencyFromIndex(targetBin, bufferLength);
+                            
+                            // Check harmonics (up to 4th harmonic)
+                            for (let harmonic = 2; harmonic <= 4; harmonic++) {
+                                const harmonicFreq = freq * harmonic;
+                                const harmonicBin = Math.round(harmonicFreq * bufferLength / 22050);
+                                
+                                if (harmonicBin < bufferLength) {
+                                    const harmonicValue = processedData[harmonicBin] / 255;
+                                    const harmonicInfluence = 0.5 * freqDiffusion / harmonic;
+                                    value += harmonicValue * harmonicInfluence;
+                                }
+                            }
+                            
+                            // Check sub-harmonics (down to 1/4th)
+                            for (let subHarmonic = 2; subHarmonic <= 4; subHarmonic++) {
+                                const subHarmonicFreq = freq / subHarmonic;
+                                const subHarmonicBin = Math.round(subHarmonicFreq * bufferLength / 22050);
+                                
+                                if (subHarmonicBin >= 0) {
+                                    const subHarmonicValue = processedData[subHarmonicBin] / 255;
+                                    const subHarmonicInfluence = 0.7 * freqDiffusion / subHarmonic;
+                                    value += subHarmonicValue * subHarmonicInfluence;
+                                }
+                            }
+                        }
+                        
+                        // Convert back to 0-255 range and store
+                        diffusedData[targetBin] = Math.min(255, Math.max(0, value * 255));
+                    }
+                    
+                    // Replace processed data with diffused data
+                    for (let i = 0; i < bufferLength; i++) {
+                        processedData[i] = diffusedData[i];
+                    }
+                }
+                
+                // Apply the selected frequency scale transformation
+                switch(scale) {
+                    case 'linear':
+                        // Apply overall amplification to linear scale
+                        for (let i = 0; i < bufferLength; i++) {
+                            processedData[i] = Math.min(255, processedData[i] * amplification);
+                        }
+                        return processedData;
+                        
+                    case 'logarithmic':
+                        // Create a logarithmic scale for better visualization of frequency bands
+                        const logFrequencyData = new Uint8Array(bufferLength);
+                        
+                        for (let i = 0; i < bufferLength; i++) {
+                            // Log scale transformation
+                            const logIndex = Math.round(Math.log10(i + 1) / Math.log10(bufferLength) * bufferLength);
+                            if (logIndex < bufferLength) {
+                                // Apply amplification to make the visualization more dynamic
+                                logFrequencyData[i] = Math.min(255, processedData[logIndex] * amplification);
+                            }
+                        }
+                        return logFrequencyData;
+                        
+                    case 'mel':
+                        // Create a mel-scaled representation (perceptual scale)
+                        const melFrequencyData = new Uint8Array(bufferLength);
+                        const maxMel = melScale(22050); // Nyquist frequency
+                        
+                        for (let i = 0; i < bufferLength; i++) {
+                            // Convert current index to frequency, then to mel
+                            const freq = getFrequencyFromIndex(i, bufferLength);
+                            const melValue = melScale(freq);
+                            
+                            // Map mel value to an index in the original array
+                            const melIndex = Math.min(bufferLength - 1, 
+                                                      Math.floor((melValue / maxMel) * bufferLength));
+                            
+                            melFrequencyData[i] = Math.min(255, processedData[melIndex] * amplification);
+                        }
+                        return melFrequencyData;
+                        
+                    case 'bark':
+                        // Create a bark-scaled representation (critical bands)
+                        const barkFrequencyData = new Uint8Array(bufferLength);
+                        const maxBark = barkScale(22050); // Nyquist frequency
+                        
+                        for (let i = 0; i < bufferLength; i++) {
+                            // Convert current index to frequency, then to bark
+                            const freq = getFrequencyFromIndex(i, bufferLength);
+                            const barkValue = barkScale(freq);
+                            
+                            // Map bark value to an index in the original array
+                            const barkIndex = Math.min(bufferLength - 1, 
+                                                       Math.floor((barkValue / maxBark) * bufferLength));
+                            
+                            barkFrequencyData[i] = Math.min(255, processedData[barkIndex] * amplification);
+                        }
+                        return barkFrequencyData;
+                        
+                    case 'octave':
+                        // Group frequencies into octave bands
+                        const octaveFrequencyData = new Uint8Array(bufferLength);
+                        const octaveBands = 10; // Number of octave bands to display
+                        
+                        for (let i = 0; i < bufferLength; i++) {
+                            // Calculate which octave band this frequency belongs to
+                            const freq = getFrequencyFromIndex(i, bufferLength);
+                            
+                            // Calculate octave band (log2 scale) - starting from ~20Hz
+                            let octaveBand = 0;
+                            if (freq > 0) {
+                                octaveBand = Math.min(octaveBands - 1, 
+                                                      Math.floor(Math.log2(freq / 20)));
+                            }
+                            
+                            // Map index to buffer length
+                            const bandPosition = i / bufferLength;
+                            const octavePosition = octaveBand / octaveBands;
+                            
+                            // The closer the positions, the more this frequency contributes to the output
+                            const proximity = 1 - Math.min(1, Math.abs(bandPosition - octavePosition) * 10);
+                            
+                            octaveFrequencyData[i] = Math.min(255, processedData[i] * proximity * amplification);
+                        }
+                        return octaveFrequencyData;
+                        
+                    case 'chroma':
+                        // Create a chroma representation (musical notes C-B)
+                        const chromaFrequencyData = new Uint8Array(bufferLength);
+                        const noteIntensity = new Array(12).fill(0); // 12 semitones in an octave
+                        
+                        // First, accumulate energy for each note
+                        for (let i = 0; i < bufferLength; i++) {
+                            const freq = getFrequencyFromIndex(i, bufferLength);
+                            if (freq > 20) { // Only consider audible frequencies
+                                const note = getNoteFromFrequency(freq);
+                                noteIntensity[note] += processedData[i] / 255; // Accumulate energy
+                            }
+                        }
+                        
+                        // Normalize note intensities
+                        const maxIntensity = Math.max(...noteIntensity, 0.1);
+                        for (let i = 0; i < noteIntensity.length; i++) {
+                            noteIntensity[i] = (noteIntensity[i] / maxIntensity) * 255 * amplification;
+                        }
+                        
+                        // Map data to notes
+                        for (let i = 0; i < bufferLength; i++) {
+                            const freq = getFrequencyFromIndex(i, bufferLength);
+                            if (freq > 20) {
+                                const note = getNoteFromFrequency(freq);
+                                chromaFrequencyData[i] = Math.min(255, noteIntensity[note]);
+                            }
+                        }
+                        return chromaFrequencyData;
+                        
+                    default:
+                        return processedData;
+                }
+            }
+            
+            // Draw visualization based on selected type
+            function drawVisualization() {
+                if (!analyser) return;
+                
+                try {
+                    const bufferLength = analyser.frequencyBinCount;
+                    const frequencyData = new Uint8Array(bufferLength);
+                    analyser.getByteFrequencyData(frequencyData);
+                    
+                    // Apply frequency processing
+                    let scaledData = getScaledFrequencyData(frequencyData);
+                    
+                    // Apply mirroring if selected
+                    scaledData = getMirroredData(scaledData);
+                    
+                    const width = ctx.canvas.width;
+                    const height = ctx.canvas.height;
+                    const visualType = visualizationType.value;
+                    const barWidthPercent = parseInt(barWidthInput.value) / 100;
+                    const primaryColor = primaryColorInput.value;
+                    const secondaryColor = secondaryColorInput.value;
+                    const backgroundColor = backgroundColorInput.value;
+                    
+                    // Clear canvas with a clean state
+                    ctx.save();
+                    ctx.filter = 'none';
+                    ctx.fillStyle = backgroundColor;
+                    ctx.fillRect(0, 0, width, height);
+                    ctx.restore();
+                    
+                    // Create gradient
+                    const gradient = ctx.createLinearGradient(0, height, 0, 0);
+                    gradient.addColorStop(0, primaryColor);
+                    gradient.addColorStop(1, secondaryColor);
+                    
+                    // Apply line thickness and softness effects for main visualization
+                    ctx.save();
+                    applyVisualizationEffects();
+                    
+                    // Draw based on visualization type
+                    switch (visualType) {
+                        case 'bars':
+                            drawBars(scaledData, width, height, barWidthPercent, gradient);
+                            break;
+                        case 'line':
+                            drawLine(scaledData, width, height, gradient);
+                            break;
+                        case 'circular':
+                            drawCircular(scaledData, width, height, gradient);
+                            break;
+                        case 'trapNation':
+                            drawTrapNation(scaledData, width, height, gradient);
+                            break;
+                        case 'wave':
+                            drawWave(scaledData, width, height, gradient);
+                            break;
+                        case 'polarWave':
+                            drawPolarWave(scaledData, width, height, gradient);
+                            break;
+                    }
+                    
+                    // Reset effects after drawing
+                    ctx.restore();
+                } catch (e) {
+                    console.error("Error in visualization:", e);
+                }
+            }
+            
+            // Draw bars visualization
+            function drawBars(data, width, height, barWidthPercent, gradient) {
+                const dataLength = data.length / 2; // Only use half the data for better visualization
+                const barWidth = (width / dataLength) * barWidthPercent;
+                const barSpacing = (width / dataLength) * (1 - barWidthPercent);
+                
+                ctx.fillStyle = gradient;
+                
+                for (let i = 0; i < dataLength; i++) {
+                    const barHeight = (data[i] / 255) * height;
+                    const x = i * (barWidth + barSpacing);
+                    const y = height - barHeight;
+                    
+                    ctx.fillRect(x, y, barWidth, barHeight);
+                }
+            }
+            
+            // Draw line visualization
+            function drawLine(data, width, height, gradient) {
+                const dataLength = data.length / 2;
+                const lineThickness = parseFloat(lineThicknessInput.value);
+                
+                ctx.strokeStyle = gradient;
+                ctx.lineWidth = lineThickness;
+                ctx.beginPath();
+                
+                for (let i = 0; i < dataLength; i++) {
+                    const x = (i / dataLength) * width;
+                    const y = height - ((data[i] / 255) * height);
+                    
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                
+                ctx.stroke();
+                
+                // Fill area under the line
+                ctx.lineTo(width, height);
+                ctx.lineTo(0, height);
+                ctx.closePath();
+                ctx.fillStyle = gradient;
+                ctx.globalAlpha = 0.3;
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            }
+            
+            // Draw circular visualization
+            function drawCircular(data, width, height, gradient) {
+                const centerX = width / 2;
+                const centerY = height / 2;
+                const dataLength = data.length / 2;
+                const lineThickness = parseFloat(lineThicknessInput.value);
+                
+                // Get center circle properties
+                const centerSizeRatio = parseFloat(centerSizeInput.value);
+                const centerColor = centerColorInput.value;
+                const centerPulse = centerPulseInput.checked;
+                
+                // Calculate base outer radius (maximum radius of the visualization)
+                const maxRadius = Math.min(centerX, centerY) * 0.9;
+                
+                // Calculate center circle radius
+                let centerRadius = maxRadius * centerSizeRatio;
+                
+                // Apply pulsing effect to center circle if enabled
+                if (centerPulse) {
+                    // Get average of low frequencies for pulse effect
+                    let lowFreqAvg = 0;
+                    const lowFreqSamples = Math.min(20, dataLength / 10);
+                    for (let i = 0; i < lowFreqSamples; i++) {
+                        lowFreqAvg += data[i] / 255;
+                    }
+                    lowFreqAvg /= lowFreqSamples;
+                    
+                    // Apply pulse effect (up to 30% size increase based on bass)
+                    centerRadius *= (1 + (lowFreqAvg * 0.3));
+                }
+                
+                // Draw the visualization (radiating from center circle)
+                ctx.strokeStyle = gradient;
+                ctx.lineWidth = lineThickness;
+                ctx.beginPath();
+                
+                for (let i = 0; i < dataLength; i++) {
+                    // Calculate the amplitude based on frequency data
+                    // Scale to fill the space between center circle and max radius
+                    const amplitude = centerRadius + ((data[i] / 255) * (maxRadius - centerRadius));
+                    const angle = (i / dataLength) * Math.PI * 2;
+                    
+                    const x = centerX + Math.cos(angle) * amplitude;
+                    const y = centerY + Math.sin(angle) * amplitude;
+                    
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                
+                ctx.closePath();
+                ctx.stroke();
+                
+                // Fill the visualization area
+                ctx.fillStyle = gradient;
+                ctx.globalAlpha = 0.3;
+                ctx.fill();
+                ctx.globalAlpha = 1;
+                
+                // Draw center circle/logo (with no blur)
+                try {
+                    // Explicitly save the current context state
+                    ctx.save();
+                    
+                    // Ensure no filter is applied for the center circle
+                    ctx.filter = 'none';
+                    
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, centerRadius, 0, Math.PI * 2);
+                    ctx.fillStyle = centerColor;
+                    ctx.fill();
+                    
+                    // Optional: Add logo text in center
+                    const logoText = "AUDIO";
+                    ctx.font = `bold ${Math.floor(centerRadius * 0.5)}px Arial`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    
+                    // Create contrasting text color for visibility
+                    const r = parseInt(centerColor.slice(1, 3), 16);
+                    const g = parseInt(centerColor.slice(3, 5), 16);
+                    const b = parseInt(centerColor.slice(5, 7), 16);
+                    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+                    ctx.fillStyle = brightness > 128 ? '#000000' : '#FFFFFF';
+                    
+                    ctx.fillText(logoText, centerX, centerY);
+                    
+                    // Restore the previous context state
+                    ctx.restore();
+                } catch (e) {
+                    console.error("Error drawing center circle:", e);
+                }
+            }
+            
+            // Draw Trap Nation style visualization
+            function drawTrapNation(data, width, height, gradient) {
+                const centerX = width / 2;
+                const centerY = height / 2;
+                const dataLength = data.length / 2;
+                const lineThickness = parseFloat(lineThicknessInput.value);
+                
+                // Get center circle properties
+                const centerSizeRatio = parseFloat(centerSizeInput.value);
+                const centerColor = centerColorInput.value;
+                const centerPulse = centerPulseInput.checked;
+                const showMountain = showMountainInput.checked;
+                const mountainColor = mountainColorInput.value;
+                
+                // Calculate mountain height (25% of canvas height)
+                const mountainHeight = height * 0.25;
+                const groundLevel = height - mountainHeight;
+                
+                // Calculate base outer radius (maximum radius of the visualization)
+                const maxRadius = Math.min(centerX, centerY - (showMountain ? mountainHeight/2 : 0)) * 0.85;
+                
+                // Adjust center Y position to make room for mountains
+                const adjustedCenterY = centerY - (showMountain ? mountainHeight/4 : 0);
+                
+                // Calculate center circle radius
+                let centerRadius = maxRadius * centerSizeRatio;
+                
+                // Apply pulsing effect to center circle if enabled
+                if (centerPulse) {
+                    // Get average of low frequencies for pulse effect
+                    let lowFreqAvg = 0;
+                    const lowFreqSamples = Math.min(20, dataLength / 10);
+                    for (let i = 0; i < lowFreqSamples; i++) {
+                        lowFreqAvg += data[i] / 255;
+                    }
+                    lowFreqAvg /= lowFreqSamples;
+                    
+                    // Apply pulse effect (up to 20% size increase based on bass)
+                    centerRadius *= (1 + (lowFreqAvg * 0.2));
+                }
+                
+                // Calculate bar properties
+                const barCount = Math.min(dataLength, 120); // Limit number of bars for performance
+                const maxBarHeight = maxRadius - centerRadius;
+                const gapRatio = 0.2; // 20% gap between bars
+                const barWidth = (Math.PI * 2 / barCount) * (1 - gapRatio);
+                
+                // Draw bars in circular pattern
+                for (let i = 0; i < barCount; i++) {
+                    const angle = (i / barCount) * Math.PI * 2;
+                    
+                    // Skip bars at the bottom if showing mountains
+                    if (showMountain && angle > Math.PI * 0.6 && angle < Math.PI * 1.4) {
+                        continue;
+                    }
+                    
+                    // Map data to bar height with some smoothing for adjacent bars
+                    let barHeightRatio = data[i] / 255;
+                    
+                    // Add slight influence from adjacent bars for smoother look
+                    if (i > 0 && i < barCount - 1) {
+                        barHeightRatio = barHeightRatio * 0.6 + 
+                                         (data[i-1] / 255) * 0.2 + 
+                                         (data[i+1] / 255) * 0.2;
+                    }
+                    
+                    const barHeight = barHeightRatio * maxBarHeight;
+                    
+                    // Calculate bar coordinates
+                    const innerRadius = centerRadius;
+                    const outerRadius = innerRadius + barHeight;
+                    
+                    // Draw the bar using a filled path
+                    ctx.beginPath();
+                    
+                    // Inner arc (at center circle edge)
+                    ctx.arc(centerX, adjustedCenterY, innerRadius, angle, angle + barWidth);
+                    
+                    // Outer arc (at bar height)
+                    ctx.arc(centerX, adjustedCenterY, outerRadius, angle + barWidth, angle, true);
+                    
+                    ctx.closePath();
+                    
+                    // Fill with gradient
+                    ctx.fillStyle = gradient;
+                    ctx.fill();
+                    
+                    // Add outline to bars if lineThickness > 1
+                    if (lineThickness > 1) {
+                        ctx.strokeStyle = gradient;
+                        ctx.lineWidth = lineThickness * 0.5; // Thinner outline for bars
+                        ctx.stroke();
+                    }
+                }
+                
+                // Draw mountains if enabled (with no blur)
+                if (showMountain) {
+                    resetVisualizationEffects();
+                    
+                    ctx.fillStyle = mountainColor;
+                    
+                    // Create mountain silhouette
+                    ctx.beginPath();
+                    ctx.moveTo(0, height);
+                    
+                    // First mountain (left)
+                    ctx.lineTo(width * 0.2, groundLevel);
+                    ctx.lineTo(width * 0.35, groundLevel + mountainHeight * 0.7);
+                    
+                    // Middle mountain (tallest)
+                    ctx.lineTo(width * 0.5, groundLevel - mountainHeight * 0.5);
+                    ctx.lineTo(width * 0.65, groundLevel + mountainHeight * 0.6);
+                    
+                    // Right mountain
+                    ctx.lineTo(width * 0.8, groundLevel);
+                    ctx.lineTo(width, height);
+                    
+                    ctx.closePath();
+                    ctx.fill();
+                    
+                    // Reapply effects for subsequent drawings
+                    applyVisualizationEffects();
+                }
+                
+                // Draw center circle/logo (with no blur)
+                resetVisualizationEffects();
+                
+                ctx.beginPath();
+                ctx.arc(centerX, adjustedCenterY, centerRadius, 0, Math.PI * 2);
+                ctx.fillStyle = centerColor;
+                ctx.fill();
+                
+                // Optional: Add logo text in center
+                const logoText = "TRAP";
+                ctx.font = `bold ${Math.floor(centerRadius * 0.5)}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                // Create contrasting text color for visibility
+                const r = parseInt(centerColor.slice(1, 3), 16);
+                const g = parseInt(centerColor.slice(3, 5), 16);
+                const b = parseInt(centerColor.slice(5, 7), 16);
+                const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+                ctx.fillStyle = brightness > 128 ? '#000000' : '#FFFFFF';
+                
+                ctx.fillText(logoText, centerX, adjustedCenterY);
+                
+                // Reapply effects for subsequent drawings
+                applyVisualizationEffects();
+            }
+            
+            // Draw wave visualization
+            function drawWave(data, width, height, gradient) {
+                const dataLength = data.length / 2;
+                const lineThickness = parseFloat(lineThicknessInput.value);
+                
+                ctx.strokeStyle = gradient;
+                ctx.lineWidth = lineThickness;
+                
+                // Draw multiple waves with different phases
+                for (let wave = 0; wave < 3; wave++) {
+                    const phaseOffset = wave * (Math.PI / 4);
+                    const amplitude = 0.8 - (wave * 0.2);
+                    
+                    ctx.beginPath();
+                    
+                    for (let i = 0; i < dataLength; i++) {
+                        const x = (i / dataLength) * width;
+                        const normalized = data[i] / 255;
+                        const y = height / 2 + Math.sin(i * 0.1 + phaseOffset) * normalized * height * amplitude * 0.4;
+                        
+                        if (i === 0) {
+                            ctx.moveTo(x, y);
+                        } else {
+                            ctx.lineTo(x, y);
+                        }
+                    }
+                    
+                    ctx.globalAlpha = 1 - (wave * 0.2);
+                    ctx.stroke();
+                }
+                
+                ctx.globalAlpha = 1;
+            }
+            
+            // Draw polar wave visualization
+            function drawPolarWave(data, width, height, gradient) {
+                const centerX = width / 2;
+                const centerY = height / 2;
+                const dataLength = data.length / 2;
+                const lineThickness = parseFloat(lineThicknessInput.value);
+                
+                // Get center circle properties
+                const centerSizeRatio = parseFloat(centerSizeInput.value);
+                const centerColor = centerColorInput.value;
+                const centerPulse = centerPulseInput.checked;
+                
+                // Calculate base outer radius (maximum radius of the visualization)
+                const maxRadius = Math.min(centerX, centerY) * 0.9;
+                
+                // Calculate center circle radius
+                let centerRadius = maxRadius * centerSizeRatio;
+                
+                // Apply pulsing effect to center circle if enabled
+                if (centerPulse) {
+                    // Get average of low frequencies for pulse effect
+                    let lowFreqAvg = 0;
+                    const lowFreqSamples = Math.min(20, dataLength / 10);
+                    for (let i = 0; i < lowFreqSamples; i++) {
+                        lowFreqAvg += data[i] / 255;
+                    }
+                    lowFreqAvg /= lowFreqSamples;
+                    
+                    // Apply pulse effect (up to 30% size increase based on bass)
+                    centerRadius *= (1 + (lowFreqAvg * 0.3));
+                }
+                
+                // Create multiple layers with different wave characteristics
+                for (let layer = 0; layer < 4; layer++) {
+                    ctx.beginPath();
+                    
+                    // Each layer gets a different alpha and wave frequency
+                    const layerOpacity = 1 - (layer * 0.15);
+                    const waveFrequency = 8 + (layer * 2); // Controls number of waves
+                    const phaseOffset = layer * (Math.PI / 4); // Offset each layer's phase
+                    
+                    for (let i = 0; i <= dataLength; i++) {
+                        // Map index to angle (0 to 2π)
+                        const angle = (i / dataLength) * Math.PI * 2;
+                        
+                        // Get frequency data at this point
+                        const dataIndex = i % dataLength;
+                        const normalized = data[dataIndex] / 255;
+                        
+                        // Calculate wave effect
+                        const waveEffect = Math.sin(angle * waveFrequency + phaseOffset) * 0.2;
+                        
+                        // Apply wave effect and frequency data to radius
+                        // Start from center circle radius instead of center point
+                        const radiusMultiplier = 0.7 + (waveEffect * normalized);
+                        const waveAmplitude = (maxRadius - centerRadius) * (0.5 + (normalized * 0.5));
+                        const radius = centerRadius + waveAmplitude * radiusMultiplier;
+                        
+                        // Convert to cartesian coordinates
+                        const x = centerX + Math.cos(angle) * radius;
+                        const y = centerY + Math.sin(angle) * radius;
+                        
+                        if (i === 0) {
+                            ctx.moveTo(x, y);
+                        } else {
+                            ctx.lineTo(x, y);
+                        }
+                    }
+                    
+                    // Close the path
+                    ctx.closePath();
+                    
+                    // Draw with different styles based on layer
+                    if (layer === 0) {
+                        // Outermost layer gets fill and stroke
+                        ctx.strokeStyle = gradient;
+                        ctx.lineWidth = lineThickness;
+                        ctx.stroke();
+                        
+                        ctx.fillStyle = gradient;
+                        ctx.globalAlpha = 0.2;
+                        ctx.fill();
+                    } else {
+                        // Inner layers get only stroke with varying opacity
+                        ctx.strokeStyle = gradient;
+                        ctx.lineWidth = lineThickness * 0.5;
+                        ctx.globalAlpha = layerOpacity;
+                        ctx.stroke();
+                    }
+                }
+                
+                ctx.globalAlpha = 1;
+                
+                // Draw center circle/logo (with no blur)
+                resetVisualizationEffects();
+                
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, centerRadius, 0, Math.PI * 2);
+                ctx.fillStyle = centerColor;
+                ctx.fill();
+                
+                // Optional: Add logo text in center
+                const logoText = "AUDIO";
+                ctx.font = `bold ${Math.floor(centerRadius * 0.5)}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                // Create contrasting text color for visibility
+                const r = parseInt(centerColor.slice(1, 3), 16);
+                const g = parseInt(centerColor.slice(3, 5), 16);
+                const b = parseInt(centerColor.slice(5, 7), 16);
+                const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+                ctx.fillStyle = brightness > 128 ? '#000000' : '#FFFFFF';
+                
+                ctx.fillText(logoText, centerX, centerY);
+                
+                // Reapply effects for subsequent drawings
+                applyVisualizationEffects();
+            }
+            
+            // Event Listeners
+            uploadButton.addEventListener('click', () => {
+                audioFileInput.click();
+            });
+            
+            audioFileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    loadAudioFile(e.target.files[0]);
+                }
+            });
+            
+            playButton.addEventListener('click', togglePlay);
+            
+            micButton.addEventListener('click', () => {
+                initAudio();
+                startMicrophone();
+            });
+            
+            // Control event listeners
+            fftSizeSelect.addEventListener('input', () => {
+                const power = parseInt(fftSizeSelect.value);
+                const size = Math.pow(2, power);
+                fftSizeValue.textContent = size;
+                updateAnalyserSettings();
+            });
+            
+            smoothingInput.addEventListener('input', () => {
+                const value = parseFloat(smoothingInput.value);
+                smoothingValue.textContent = value.toFixed(2);
+                updateAnalyserSettings();
+            });
+            
+            minDecibelsInput.addEventListener('input', () => {
+                const value = parseInt(minDecibelsInput.value);
+                minDecibelsValue.textContent = value + ' dB';
+                updateAnalyserSettings();
+            });
+            
+            maxDecibelsInput.addEventListener('input', () => {
+                const value = parseInt(maxDecibelsInput.value);
+                maxDecibelsValue.textContent = value + ' dB';
+                updateAnalyserSettings();
+            });
+            
+            barWidthInput.addEventListener('input', () => {
+                const value = parseInt(barWidthInput.value);
+                barWidthValue.textContent = value + '%';
+            });
+            
+            amplificationInput.addEventListener('input', () => {
+                const value = parseFloat(amplificationInput.value);
+                amplificationValue.textContent = value.toFixed(1) + 'x';
+            });
+            
+            lowGainInput.addEventListener('input', () => {
+                const value = parseFloat(lowGainInput.value);
+                lowGainValue.textContent = value.toFixed(1) + 'x';
+            });
+            
+            midGainInput.addEventListener('input', () => {
+                const value = parseFloat(midGainInput.value);
+                midGainValue.textContent = value.toFixed(1) + 'x';
+            });
+            
+            highGainInput.addEventListener('input', () => {
+                const value = parseFloat(highGainInput.value);
+                highGainValue.textContent = value.toFixed(1) + 'x';
+            });
+            
+            freqDiffusionInput.addEventListener('input', () => {
+                const value = parseFloat(freqDiffusionInput.value);
+                freqDiffusionValue.textContent = value.toFixed(2);
+            });
+            
+            centerSizeInput.addEventListener('input', () => {
+                const value = parseFloat(centerSizeInput.value);
+                centerSizeValue.textContent = value.toFixed(2);
+            });
+            
+            lineThicknessInput.addEventListener('input', () => {
+                const value = parseFloat(lineThicknessInput.value);
+                lineThicknessValue.textContent = value.toFixed(1);
+            });
+            
+            lineSoftnessInput.addEventListener('input', () => {
+                const value = parseFloat(lineSoftnessInput.value);
+                lineSoftnessValue.textContent = value.toFixed(1);
+            });
+            
+            // Initialize
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+            checkFilterSupport();
+            
+            // Handle visibility changes to pause/resume
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden && isPlaying) {
+                    if (!isUsingMic) {
+                        audioElement.pause();
+                    }
+                    cancelAnimationFrame(animationId);
+                } else if (!document.hidden && isPlaying) {
+                    if (!isUsingMic) {
+                        audioElement.play();
+                    }
+                    startVisualization();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
